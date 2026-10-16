@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -17,6 +18,8 @@ class Command(BaseCommand):
             events, registrations = sync_from_mongo(client.get_default_database())
         except PyMongoError as exc:
             raise CommandError(f"Could not read from MongoDB: {exc}") from exc
+        except ValidationError as exc:
+            raise CommandError(f"Validation error: {exc}") from exc
         finally:
             client.close()
         self.stdout.write(self.style.SUCCESS(f"Synced {events} events and {registrations} registrations."))
