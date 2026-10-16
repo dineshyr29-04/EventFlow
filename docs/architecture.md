@@ -12,7 +12,7 @@ React (5173) ──/api──▶ Express (5000) ──▶ MongoDB ◀── Fast
 - **Validation is hand-written** (`backend/src/services/validation.js`) instead of adding a library; Mongoose schema constraints act as a second line of defence.
 - **Dates**: `date` is stored as a UTC-midnight `Date`, `time` as an `HH:MM` string. "Upcoming" = date >= start of today (UTC).
 - **Duplicate registrations**: an explicit check gives a friendly 409, and a unique index on `(eventId, email)` covers concurrent requests.
-- **Capacity**: checked before insert. Two simultaneous requests for the last seat could both succeed (documented limitation).
+- **Capacity**: atomically checked and reserved at the database level using `findOneAndUpdate` on `Event.registeredCount`, preventing race conditions from concurrent registration requests.
 - **Deleting an event** also deletes its registrations.
 - **FastAPI reads MongoDB directly** with PyMongo and returns three counts. It is read-only. Tests inject an in-memory `mongomock` database through a FastAPI dependency.
 - **Django + MongoDB**: Django has no first-class MongoDB support. Rather than pull in an experimental backend, Django keeps a SQLite snapshot filled by `sync_from_mongo`, and the admin is read-only. This shows Django admin without a duplicate second backend.
