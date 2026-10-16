@@ -43,6 +43,7 @@ async function updateEvent(req, res) {
   }
 
   event.set(data);
+  event.registeredCount = registrationCount;
   await event.save();
   res.json(event);
 }
