@@ -163,6 +163,54 @@ describe('registrations', () => {
     const get = await request(app).get(`/api/events/${id}/registrations`);
     expect(get.status).toBe(404);
   });
+
+  test('handles simultaneous registration requests safely without exceeding capacity', async () => {
+    const event = await createEvent({ capacity: 1 });
+    const requests = [
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'User 1', email: 'user1@example.com' }),
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'User 2', email: 'user2@example.com' }),
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'User 3', email: 'user3@example.com' }),
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'User 4', email: 'user4@example.com' }),
+    ];
+
+    const responses = await Promise.all(requests);
+    const successes = responses.filter((r) => r.status === 201);
+    const fullErrors = responses.filter((r) => r.status === 409 && /full/i.test(r.body.error));
+
+    expect(successes).toHaveLength(1);
+    expect(fullErrors).toHaveLength(3);
+    expect(await Registration.countDocuments({ eventId: event._id })).toBe(1);
+  });
+
+  test('handles concurrent registrations with multiple seats without overfilling', async () => {
+    const event = await createEvent({ capacity: 3 });
+    const requests = Array.from({ length: 6 }, (_, i) =>
+      request(app)
+        .post(`/api/events/${event._id}/register`)
+        .send({ name: `User ${i}`, email: `user${i}@example.com` })
+    );
+
+    const responses = await Promise.all(requests);
+    const successes = responses.filter((r) => r.status === 201);
+    const fullErrors = responses.filter((r) => r.status === 409 && /full/i.test(r.body.error));
+
+    expect(successes).toHaveLength(3);
+    expect(fullErrors).toHaveLength(3);
+    expect(await Registration.countDocuments({ eventId: event._id })).toBe(3);
+  });
+
+  test('handles concurrent registration attempts with duplicate email safely', async () => {
+    const event = await createEvent({ capacity: 5 });
+    const requests = [
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'Asha', email: 'asha@example.com' }),
+      request(app).post(`/api/events/${event._id}/register`).send({ name: 'Asha Copy', email: 'asha@example.com' }),
+    ];
+
+    const responses = await Promise.all(requests);
+    const statuses = responses.map((r) => r.status).sort();
+    expect(statuses).toEqual([201, 409]);
+    expect(await Registration.countDocuments({ eventId: event._id })).toBe(1);
+  });
 });
 
 describe('stats & misc', () => {
