@@ -21,31 +21,46 @@ def sync_from_mongo(db):
 
         events = {}
         for doc in db["events"].find():
-            events[doc["_id"]] = Event.objects.create(
+            doc_date = doc.get("date")
+            event_date = doc_date.date() if hasattr(doc_date, "date") else doc_date
+            event = Event(
                 mongo_id=str(doc["_id"]),
-                title=doc["title"],
+                title=doc.get("title"),
                 description=doc.get("description", ""),
-                date=doc["date"].date(),
-                time=doc["time"],
-                location=doc["location"],
-                organizer=doc["organizer"],
-                capacity=doc["capacity"],
+                date=event_date,
+                time=doc.get("time"),
+                location=doc.get("location"),
+                organizer=doc.get("organizer"),
+                capacity=doc.get("capacity"),
                 created_at=_aware(doc.get("createdAt")),
                 updated_at=_aware(doc.get("updatedAt")),
             )
+            exclude = []
+            if doc.get("createdAt") is None:
+                exclude.append("created_at")
+            if doc.get("updatedAt") is None:
+                exclude.append("updated_at")
+            event.full_clean(exclude=exclude or None)
+            event.save()
+            events[doc["_id"]] = event
 
         registrations = 0
         for doc in db["registrations"].find():
             event = events.get(doc["eventId"])
             if event is None:  # orphaned registration; skip it
                 continue
-            Registration.objects.create(
+            registration = Registration(
                 mongo_id=str(doc["_id"]),
-                name=doc["name"],
-                email=doc["email"],
+                name=doc.get("name"),
+                email=doc.get("email"),
                 event=event,
                 registered_at=_aware(doc.get("registeredAt")),
             )
+            exclude = []
+            if doc.get("registeredAt") is None:
+                exclude.append("registered_at")
+            registration.full_clean(exclude=exclude or None)
+            registration.save()
             registrations += 1
 
     return len(events), registrations
